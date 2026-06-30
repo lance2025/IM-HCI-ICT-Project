@@ -5,9 +5,11 @@ All location fields are under the collapsible "More Details" section.
 
 import customtkinter as ctk
 from tkinter import messagebox
+from tkinter import filedialog
 from datetime import datetime
 from ui.components import COLORS, get_font, get_game_logo_ctk
-from backend.games import get_all_games, add_game
+from ui.game_selector import GameSelectorWidget
+from backend.games import get_all_games, add_game, update_game, delete_game, get_game_logo_path, LOGOS_DIR
 from backend.events import create_event
 from backend.auth import Session, get_all_timezones
 
@@ -72,33 +74,18 @@ class AddEventWindow(ctk.CTkToplevel):
         row += 1
 
         self.games = get_all_games()
-        game_names = [g['game_name'] for g in self.games]
 
         self.game_var = ctk.StringVar(value="")
-        self.game_combo = ctk.CTkComboBox(game_row_frame, values=game_names,
-                                           variable=self.game_var,
-                                           height=38, corner_radius=12,
-                                           font=get_font(12),
-                                           fg_color=COLORS['bg_input'],
-                                           border_color=COLORS['border'],
-                                           border_width=1,
-                                           button_color=COLORS['accent_dark'],
-                                           button_hover_color=COLORS['accent'],
-                                           dropdown_fg_color=COLORS['bg_medium'],
-                                           dropdown_hover_color=COLORS['accent_dark'],
-                                           text_color=COLORS['text_primary'],
-                                           command=self._on_game_selected)
-        self.game_combo.grid(row=0, column=0, sticky="ew", padx=(0, 8))
-        self.game_combo.set("")
-
-        add_game_btn = ctk.CTkButton(game_row_frame, text="+ New", width=70,
-                                      height=38, corner_radius=12,
-                                      font=get_font(11),
-                                      fg_color=COLORS['bg_input'],
-                                      hover_color=COLORS['border'],
-                                      text_color=COLORS['accent'],
-                                      command=self._add_new_game)
-        add_game_btn.grid(row=0, column=1)
+        self.game_selector = GameSelectorWidget(
+            game_row_frame,
+            games=self.games,
+            game_var=self.game_var,
+            on_game_selected=self._on_game_selected,
+            on_game_added=self._on_game_list_changed,
+            on_game_edited=self._on_game_list_changed,
+            on_game_deleted=self._on_game_list_changed,
+        )
+        self.game_selector.grid(row=0, column=0, sticky="ew")
 
         # Logo preview
         self.logo_frame = ctk.CTkFrame(self.scroll, fg_color="transparent", height=56)
@@ -565,86 +552,12 @@ class AddEventWindow(ctk.CTkToplevel):
         else:
             self.logo_label.configure(image=None, text="")
 
-    def _add_new_game(self):
-        """Popup to add a new game with optional logo."""
-        import shutil
-        from tkinter import filedialog
-
-        popup = ctk.CTkToplevel(self)
-        popup.title("Add New Game")
-        popup.geometry("400x250")
-        popup.configure(fg_color=COLORS['bg_dark'])
-        popup.transient(self)
-        popup.grab_set()
-
-        ctk.CTkLabel(popup, text="Game Name:", font=get_font(12),
-                      text_color=COLORS['text_secondary']).pack(anchor="w", padx=24, pady=(20, 4))
-        name_entry = ctk.CTkEntry(popup, placeholder_text="e.g., Elden Ring",
-                                   height=38, corner_radius=12, font=get_font(12),
-                                   fg_color=COLORS['bg_input'],
-                                   border_color=COLORS['border'], border_width=1,
-                                   text_color=COLORS['text_primary'])
-        name_entry.pack(fill="x", padx=24, pady=(0, 12))
-
-        ctk.CTkLabel(popup, text="Logo (optional):", font=get_font(12),
-                      text_color=COLORS['text_secondary']).pack(anchor="w", padx=24, pady=(4, 4))
-
-        logo_path_var = ctk.StringVar(value="")
-        logo_frame = ctk.CTkFrame(popup, fg_color="transparent")
-        logo_frame.pack(fill="x", padx=24, pady=(0, 16))
-
-        logo_label = ctk.CTkLabel(logo_frame, text="No file selected",
-                                   font=get_font(11), text_color=COLORS['text_muted'])
-        logo_label.pack(side="left", expand=True, anchor="w")
-
-        def pick_logo():
-            path = filedialog.askopenfilename(
-                title="Select Game Logo",
-                filetypes=[("Images", "*.png *.jpg *.jpeg *.webp")])
-            if path:
-                logo_path_var.set(path)
-                logo_label.configure(text=path.split("/")[-1].split("\\")[-1])
-
-        ctk.CTkButton(logo_frame, text="📁 Browse", width=90, height=30,
-                       corner_radius=10, font=get_font(11),
-                       fg_color=COLORS['accent_dark'], hover_color=COLORS['accent'],
-                       text_color=COLORS['accent'],
-                       command=pick_logo).pack(side="right")
-
-        def submit_game():
-            game_name = name_entry.get().strip()
-            if not game_name:
-                messagebox.showwarning("Add Game", "Please enter a game name.")
-                return
-            success, msg = add_game(game_name)
-            if success:
-                # Copy logo to game_logos/ if provided
-                logo_src = logo_path_var.get()
-                if logo_src:
-                    import os
-                    ext = os.path.splitext(logo_src)[1]
-                    logos_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "game_logos")
-                    os.makedirs(logos_dir, exist_ok=True)
-                    dest = os.path.join(logos_dir, f"{game_name}{ext}")
-                    try:
-                        shutil.copy2(logo_src, dest)
-                    except Exception:
-                        pass
-                # Refresh game list
-                self.games = get_all_games()
-                game_names = [g['game_name'] for g in self.games]
-                self.game_combo.configure(values=game_names)
-                self.game_combo.set(game_name)
-                self._on_game_selected(game_name)
-                popup.destroy()
-            else:
-                messagebox.showwarning("Add Game", msg)
-
-        ctk.CTkButton(popup, text="Add Game", height=40, corner_radius=20,
-                       font=get_font(13, bold=True),
-                       fg_color=COLORS['accent'], hover_color=COLORS['accent_hover'],
-                       text_color=COLORS['bg_dark'],
-                       command=submit_game).pack(fill="x", padx=24, pady=(0, 20))
+    def _on_game_list_changed(self):
+        """Called when a game is added, edited, or deleted. Refresh the selector."""
+        self.games = get_all_games()
+        self.game_selector.refresh_games(self.games)
+        # Update logo preview in case current selection was renamed
+        self._on_game_selected(self.game_var.get())
 
     def _calc_duration(self):
         """Calculate and display duration between start and end time."""
@@ -813,7 +726,7 @@ class AddEventWindow(ctk.CTkToplevel):
         # Game
         game_name = d.get('game_name', '')
         if game_name:
-            self.game_var.set(game_name)
+            self.game_selector.set_game(game_name)
             self._on_game_selected(game_name)
 
         # Theme

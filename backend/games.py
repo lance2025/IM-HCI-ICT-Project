@@ -56,6 +56,52 @@ def add_game(game_name):
     return True, f"Game '{game_name}' added successfully!"
 
 
+def update_game(game_id, new_name):
+    """
+    Rename a game in the database.
+    Also renames the logo file if it exists.
+    Returns (success: bool, message: str)
+    """
+    if not new_name or not new_name.strip():
+        return False, "Game name cannot be empty."
+
+    new_name = new_name.strip()
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Get current name for logo renaming
+    cursor.execute("SELECT game_name FROM games WHERE game_id = ?", (game_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return False, "Game not found."
+    old_name = row['game_name']
+
+    # Check for duplicate
+    cursor.execute("SELECT game_id FROM games WHERE game_name = ? AND game_id != ?", (new_name, game_id))
+    if cursor.fetchone():
+        conn.close()
+        return False, f"Game '{new_name}' already exists."
+
+    cursor.execute("UPDATE games SET game_name = ? WHERE game_id = ?", (new_name, game_id))
+    conn.commit()
+    conn.close()
+
+    # Rename logo file if it exists
+    for ext in ['.png', '.jpg', '.jpeg']:
+        old_path = os.path.join(LOGOS_DIR, f"{old_name}{ext}")
+        if os.path.isfile(old_path):
+            new_path = os.path.join(LOGOS_DIR, f"{new_name}{ext}")
+            try:
+                os.rename(old_path, new_path)
+            except Exception:
+                pass
+            break
+
+    return True, f"Game renamed to '{new_name}'."
+
+
 def delete_game(game_id):
     """Delete a game from the database."""
     conn = get_connection()
