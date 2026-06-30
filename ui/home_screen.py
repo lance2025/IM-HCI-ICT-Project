@@ -1,3 +1,4 @@
+
 """
 home_screen.py — Main dashboard using CustomTkinter.
 Sidebar with mini calendar + action buttons, main area with event cards.
@@ -122,35 +123,43 @@ class HomeScreen(ctk.CTkFrame):
                                      command=self._refresh_events)
         refresh_btn.grid(row=0, column=1)
 
-        # Tabs: Ongoing / Past Events
-        self.tabview = ctk.CTkTabview(self.main_frame, corner_radius=16,
-                                       fg_color=COLORS['bg_dark'],
-                                       segmented_button_fg_color=COLORS['bg_input'],
-                                       segmented_button_selected_color=COLORS['accent'],
-                                       segmented_button_selected_hover_color=COLORS['accent_hover'],
-                                       segmented_button_unselected_color=COLORS['bg_input'],
-                                       segmented_button_unselected_hover_color=COLORS['border'],
-                                       text_color=COLORS['bg_dark'],
-                                       text_color_disabled=COLORS['text_muted'])
-        self.tabview.grid(row=2, column=0, sticky="nsew", padx=24, pady=(0, 24))
+        # Filter row: status dropdown
+        filter_row = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        filter_row.grid(row=1, column=0, sticky="ew", padx=24, pady=(0, 8))
 
-        self.tab_ongoing = self.tabview.add("⚡ Ongoing")
-        self.tab_archive = self.tabview.add("📁 Past Events")
-        self.tabview.set("⚡ Ongoing")
+        ctk.CTkLabel(filter_row, text="Show:", font=get_font(12),
+                      text_color=COLORS['text_secondary']).pack(side="left", padx=(0, 8))
 
-        # Ongoing events scroll area
-        self.ongoing_scroll = ctk.CTkScrollableFrame(self.tab_ongoing,
-                                                      fg_color="transparent",
-                                                      corner_radius=0)
-        self.ongoing_scroll.pack(fill="both", expand=True)
-        self.ongoing_scroll.grid_columnconfigure(0, weight=1)
+        self.filter_var = ctk.StringVar(value="All")
+        self.filter_dropdown = ctk.CTkComboBox(filter_row,
+                                                values=["All", "Upcoming", "Ongoing", "Archived"],
+                                                variable=self.filter_var,
+                                                width=150, height=34, corner_radius=12,
+                                                font=get_font(12),
+                                                fg_color=COLORS['bg_input'],
+                                                border_color=COLORS['border'],
+                                                border_width=1,
+                                                button_color=COLORS['accent_dark'],
+                                                button_hover_color=COLORS['accent'],
+                                                dropdown_fg_color=COLORS['bg_card'],
+                                                dropdown_hover_color=COLORS['accent_dark'],
+                                                text_color=COLORS['text_primary'],
+                                                state="readonly",
+                                                command=self._on_filter_change)
+        self.filter_dropdown.pack(side="left")
 
-        # Archive events scroll area
-        self.archive_scroll = ctk.CTkScrollableFrame(self.tab_archive,
-                                                      fg_color="transparent",
-                                                      corner_radius=0)
-        self.archive_scroll.pack(fill="both", expand=True)
-        self.archive_scroll.grid_columnconfigure(0, weight=1)
+        # Events scroll area (single list, filtered by dropdown)
+        events_container = ctk.CTkFrame(self.main_frame, fg_color=COLORS['bg_dark'],
+                                         corner_radius=16)
+        events_container.grid(row=2, column=0, sticky="nsew", padx=24, pady=(0, 24))
+        events_container.grid_rowconfigure(0, weight=1)
+        events_container.grid_columnconfigure(0, weight=1)
+
+        self.events_scroll = ctk.CTkScrollableFrame(events_container,
+                                                     fg_color="transparent",
+                                                     corner_radius=0)
+        self.events_scroll.pack(fill="both", expand=True)
+        self.events_scroll.grid_columnconfigure(0, weight=1)
 
     def _build_calendar(self):
         """Build the mini calendar widget."""
@@ -322,49 +331,52 @@ class HomeScreen(ctk.CTkFrame):
         # Date filter from calendar selection
         date_filter = getattr(self, 'selected_date', None)
 
-        # Clear ongoing scroll
-        for widget in self.ongoing_scroll.winfo_children():
+        # Status filter from dropdown
+        status_filter = self.filter_var.get() if hasattr(self, 'filter_var') else "All"
+
+        # Clear events scroll
+        for widget in self.events_scroll.winfo_children():
             widget.destroy()
 
-        # Clear archive scroll
-        for widget in self.archive_scroll.winfo_children():
-            widget.destroy()
-
-        # Load ongoing events
-        active = get_active_events(search_query=search, date_filter=date_filter)
+        # Load events based on filter
+        if status_filter == "Archived":
+            events = get_archived_events(search_query=search, date_filter=date_filter)
+        elif status_filter == "All":
+            # All = active (upcoming + ongoing + finished within 7 days) but NOT archived
+            events = get_active_events(search_query=search, date_filter=date_filter)
+        else:
+            # Specific status: Upcoming or Ongoing
+            all_active = get_active_events(search_query=search, date_filter=date_filter)
+            events = [e for e in all_active if e.get('status') == status_filter]
 
         # Show date filter indicator
+        row_offset = 0
         if date_filter:
             self._show_date_filter_bar(date_filter)
+            row_offset = 1
 
-        row_offset = 1 if date_filter else 0
-        if active:
-            for i, event in enumerate(active):
-                card = EventCard(self.ongoing_scroll, event,
+        if events:
+            for i, event in enumerate(events):
+                card = EventCard(self.events_scroll, event,
                                  on_click=self._on_event_click)
                 card.grid(row=i + row_offset, column=0, sticky="ew", pady=(0, 8), padx=4)
         else:
             empty_msg = "No events on this date" if date_filter else "No current ongoing events"
-            empty_sub = "Try selecting a different day or clear the filter." if date_filter else "Events will appear here once the admin creates them."
-            empty_frame = ctk.CTkFrame(self.ongoing_scroll, fg_color="transparent")
+            if status_filter == "Archived":
+                empty_msg = "No archived events"
+                empty_sub = "Past events that are more than a week old will appear here."
+            elif status_filter != "All":
+                empty_msg = f"No {status_filter.lower()} events"
+                empty_sub = ""
+            else:
+                empty_sub = "Try selecting a different day or clear the filter." if date_filter else "Events will appear here once created."
+            empty_frame = ctk.CTkFrame(self.events_scroll, fg_color="transparent")
             empty_frame.grid(row=row_offset, column=0, sticky="nsew", pady=60)
             ctk.CTkLabel(empty_frame, text="📭", font=get_font(40)).pack()
             ctk.CTkLabel(empty_frame, text=empty_msg, font=get_font(16, bold=True),
                           text_color=COLORS['text_secondary']).pack(pady=(8, 4))
             ctk.CTkLabel(empty_frame, text=empty_sub, font=get_font(12),
                           text_color=COLORS['text_muted']).pack()
-
-        # Load archived events
-        archived = get_archived_events(search_query=search, date_filter=date_filter)
-        if archived:
-            for i, event in enumerate(archived):
-                card = EventCard(self.archive_scroll, event,
-                                 on_click=self._on_event_click)
-                card.grid(row=i, column=0, sticky="ew", pady=(0, 8), padx=4)
-        else:
-            self._show_empty_state(self.archive_scroll,
-                                   "No archived events",
-                                   "Past events that are more than a week old will appear here.")
 
         # Refresh stats and calendar
         self._build_stats()
@@ -388,6 +400,10 @@ class HomeScreen(ctk.CTkFrame):
                                   font=get_font(12),
                                   text_color=COLORS['text_muted'])
         sub_label.pack()
+
+    def _on_filter_change(self, value):
+        """Handle status filter dropdown change."""
+        self._refresh_events()
 
     def _on_search_type(self):
         """Debounced search on key release."""
@@ -438,7 +454,8 @@ class HomeScreen(ctk.CTkFrame):
         # Details
         details = [
             ("Status", event_data.get('status', '')),
-            ("Date", event_data.get('event_date', '')),
+            ("Start Date", event_data.get('event_date', '')),
+            ("End Date", event_data.get('end_date', '') if event_data.get('end_date') and event_data.get('end_date') != event_data.get('event_date') else ''),
             ("Time", f"{event_data.get('start_time', '')} – {event_data.get('end_time', '')}" if event_data.get('end_time') else event_data.get('start_time', '')),
             ("Timezone", event_data.get('source_timezone', '')),
             ("Theme", event_data.get('event_theme', '')),
@@ -551,7 +568,7 @@ class HomeScreen(ctk.CTkFrame):
 
     def _show_date_filter_bar(self, date_str):
         """Show a small indicator above events showing which date is filtered."""
-        filter_frame = ctk.CTkFrame(self.ongoing_scroll, fg_color=COLORS['accent_dark'],
+        filter_frame = ctk.CTkFrame(self.events_scroll, fg_color=COLORS['accent_dark'],
                                      corner_radius=10, height=32)
         filter_frame.grid(row=0, column=0, sticky="ew", pady=(0, 8), padx=4)
         ctk.CTkLabel(filter_frame, text=f"📅 Showing events for: {date_str}",

@@ -98,14 +98,29 @@ class LoginScreen(ctk.CTkFrame):
         form_row += 1
 
         # Password
-        self.password_entry = ctk.CTkEntry(form, placeholder_text="Password",
+        pw_frame = ctk.CTkFrame(form, fg_color="transparent")
+        pw_frame.grid(row=form_row, column=0, sticky="ew", pady=(0, 12))
+        pw_frame.grid_columnconfigure(0, weight=1)
+
+        self.password_entry = ctk.CTkEntry(pw_frame, placeholder_text="Password",
                                             show="•", height=44, corner_radius=22,
                                             font=get_font(13),
                                             fg_color=COLORS['bg_input'],
                                             border_color=COLORS['accent_dark'],
                                             border_width=2,
                                             text_color=COLORS['text_primary'])
-        self.password_entry.grid(row=form_row, column=0, sticky="ew", pady=(0, 12))
+        self.password_entry.grid(row=0, column=0, sticky="ew")
+
+        self.show_pw = False
+        self.pw_toggle_btn = ctk.CTkButton(pw_frame, text="👁", width=36, height=36,
+                                            corner_radius=18,
+                                            fg_color="transparent",
+                                            hover_color=COLORS['border'],
+                                            text_color=COLORS['text_muted'],
+                                            font=get_font(14),
+                                            command=self._toggle_password)
+        self.pw_toggle_btn.grid(row=0, column=1, padx=(4, 0))
+
         form_row += 1
 
         # Signup-only: Timezone selector
@@ -182,6 +197,16 @@ class LoginScreen(ctk.CTkFrame):
         """Switch between login and signup modes."""
         self.mode = "signup" if self.mode == "login" else "login"
         self._build_login_card()
+
+    def _toggle_password(self):
+        """Toggle password visibility."""
+        self.show_pw = not self.show_pw
+        if self.show_pw:
+            self.password_entry.configure(show="")
+            self.pw_toggle_btn.configure(text="🙈")
+        else:
+            self.password_entry.configure(show="•")
+            self.pw_toggle_btn.configure(text="👁")
 
     def _on_submit(self):
         """Handle form submission."""
