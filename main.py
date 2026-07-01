@@ -38,7 +38,7 @@ class GameEventApp:
 
         self.root = ctk.CTk()
         self.root.title("Game Event Calendar")
-        self.root.geometry("1100x700")
+        self.root.geometry("1000x600")
         self.root.minsize(900, 600)
         self.root.configure(fg_color=COLORS['bg_dark'])
 
@@ -92,12 +92,13 @@ class GameEventApp:
     def run(self):
         """Start the application main loop."""
         # Center window on screen
-        self.root.update_idletasks()
-        width = self.root.winfo_width()
-        height = self.root.winfo_height()
-        x = (self.root.winfo_screenwidth() // 2) - (width // 2)
-        y = (self.root.winfo_screenheight() // 2) - (height // 2)
-        self.root.geometry(f"+{x}+{y}")
+        width = 1000
+        height = 600
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        x = (screen_width // 2) - (width // 2)
+        y = (screen_height // 2) - (height // 2)
+        self.root.geometry(f"{width}x{height}+{x}+{y}")
 
         print("=" * 50)
         print("  🎮 Game Event Calendar — Desktop Edition")
